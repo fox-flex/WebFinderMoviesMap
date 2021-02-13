@@ -8,7 +8,7 @@ import folium
 
 map = folium.Map()
 map = folium.Map(tiles="Stamen Terrain")
-map.save('Map_1.html')
+    map.save('map.html')
 
 
 if __name__ == '__main__':
