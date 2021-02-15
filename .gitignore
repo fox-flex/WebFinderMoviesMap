@@ -1,3 +1,5 @@
 venv
 .idea
 map.html
+__pycache__
+test.py
