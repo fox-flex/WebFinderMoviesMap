@@ -172,20 +172,13 @@ def create_map(coordinates: tuple, year: int):
     """
     function create web map in html format in which are marked points
     """
-    # map = folium.Map()
-    # map = folium.Map(tiles="Stamen Terrain")
-    # map = folium.Map(tiles='Stamen Terrain', location=[49.817545, 24.023932],
-    #                  zoom_start=17)
-
     points = create_points(read_info(coordinates, year))
 
-    map = folium.Map(location=coordinates,
-                     # tiles='Hype Map',
-                     zoom_start=5)
+    map0 = folium.Map(location=coordinates, zoom_start=5)
 
     tooltip = "Hype!"
 
-    map.add_child(folium.Marker(location=coordinates,
+    map0.add_child(folium.Marker(location=coordinates,
                                 popup="You are here!",
                                 icon=folium.Icon(color='red', icon='adjust')))
 
@@ -197,8 +190,21 @@ def create_map(coordinates: tuple, year: int):
                                             icon=folium.Icon(icon='cloud'),
                                             tooltip=tooltip))
 
-    map.add_child(point_layer)
-    map.save('map.html')
+    map0.add_child(point_layer)
+
+    # add one more layer
+
+    fg_pp = folium.FeatureGroup(name="The furthest film")
+    fg_pp.add_child(folium.GeoJson(data=open('./database/world.json', 'r',
+        encoding='utf-8-sig').read(),
+        style_function=lambda x:{'fillColor': 'green'
+        if x['properties']['POP2005'] < 10000000 else 'orange'
+        if 10000000 <= x['properties']['POP2005'] < 20000000 else 'red'}))
+    # map0.add_child(fg_hc)
+    map0.add_child(fg_pp)
+    map0.add_child(folium.LayerControl())
+
+    map0.save('map.html')
 
 
 def main():
