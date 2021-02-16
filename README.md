@@ -1,7 +1,10 @@
 # Web finder movies map 
-This project can mec a wab map in which will be marked
-nearby points by given coordinates , where was maiden
+This project can make a wab map in which will be marked
+nearby points, by given coordinates, where was maiden
 some movies in given year.
+
+Program take info from databases and internet to take
+needed information.
 # How to use it?
 With command line actually! Just follow the instruction.
 
