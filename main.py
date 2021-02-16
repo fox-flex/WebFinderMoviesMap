@@ -3,11 +3,12 @@ main module of project
 """
 
 from random import uniform
+import warnings
 import pandas as pd
 import folium
-import warnings
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
+from geopy.exc import GeocoderUnavailable
 from haversine import haversine
 
 warnings.filterwarnings('ignore')
@@ -32,7 +33,8 @@ def place_coordinates(name: str) -> dict:
 
 
 def read_info(coordinates: tuple, year: int,
-              path='./database/locations.list') -> pd.DataFrame:
+              path='./database/locations.list',
+              path_cont='./database/Countries-Continents.csv') -> pd.DataFrame:
     """
     function read data from the database and return dataset whit info
     about films
@@ -40,64 +42,89 @@ def read_info(coordinates: tuple, year: int,
     pos = str(coordinates[0]) + ', ' + str(coordinates[1])
     country = geolocator.reverse(pos, timeout=10, exactly_one=True,
                                  language='en').raw['address']['country']
-    with open(path, 'r', encoding='latin-1') as f:
+    if country == 'United States':
+        country = 'USA'
+    if country == 'United Kingdom':
+        country = 'UK'
+
+    continent = None
+    continents = {}
+    with open(path_cont, 'r', encoding='latin-1') as file:
+        file.readline()
+        for cont0, countr0 in map(lambda x: x.strip().split(','),
+                                  file.readlines()):
+            try:
+                continents[cont0].add(countr0)
+            except KeyError:
+                continents[cont0] = {countr0}
+            if countr0 == country:
+                continent = cont0
+    if continent:
+        countries = continents[continent]
+    else:
+        countries = set()
+        for some_countries in continents.items():
+            countries |= some_countries
+
+    names = set()
+    with open(path, 'r', encoding='latin-1') as file:
         for _ in range(14):
-            f.readline()
+            file.readline()
         info = pd.DataFrame(columns=['place', 'films', 'coordinates',
                                      'range', 'distance'])
-        for line in f.readlines()[:-1]:
-            line = list(map(lambda x:x.strip(), line.split('\t')))
+        for line in file.readlines()[:-1]:
+            line = list(map(lambda x: x.strip(), line.split('\t')))
             line = list(filter(None, line))
-            # print(line)
             name_line, place = line[:2]
             try:
                 ind = name_line.index('"', 2)
+                name = name_line[1:ind]
+                year0 = name_line[ind + 3:ind + 7]
             except ValueError:
-                continue
-            name = name_line[1:ind]
-            year0 = name_line[ind + 3:ind + 7]
-            if year0 != str(year) or country not in place:
+                ind = name_line.index('(') - 1
+                name = name_line[0:ind]
+                year0 = name_line[ind + 2:ind + 6]
+            names.add(name)
+            bul = False
+            if year0 == str(year):
+                for cntr in countries:
+                    if cntr in place:
+                        bul = True
+                        break
+            if not bul:
                 continue
             try:
-                # print(0)
-                print('okkkk')
                 index = info.index[info['place'] == place][0]
                 info['films'][index].add(name)
             except IndexError:
                 try:
-                    print('okk')
                     pos = place_coordinates(line[-1])
                     coord = tuple(map(float, pos['coordinates']))
                     distance = -1 * haversine(coordinates, coord)
-                    info = info.append({'place':place,
-                                        'films':{name},
-                                        'coordinates':pos['coordinates'],
-                                        'range':pos['coordinates_range'],
-                                        'distance':distance},
+                    info = info.append({'place': place,
+                                        'films': {name},
+                                        'coordinates': pos['coordinates'],
+                                        'range': pos['coordinates_range'],
+                                        'distance': distance},
                                        ignore_index=True)
-                    # print(1)
                 except AttributeError:
-                    print(2)
                     continue
                 except TypeError:
-                    # print(3)
                     continue
+                except GeocoderUnavailable:
+                    break
     for i in info.index:
         info['films'][i] = frozenset(info['films'][i])
         info['range'][i] = tuple(info['range'][i])
-    print(info)
-    print('__________________')
-    info = info.drop_duplicates()
-    print(info)
-    return info.drop_duplicates()
+    return info
 
 
 def create_points(data_base: pd.DataFrame, num_of_points=10) -> dict:
     """
     function return 10 most nearby places where was maiden movies
     """
-    print(data_base)
     data_base = data_base.nlargest(num_of_points, 'distance')
+    data_base.reset_index(drop=True, inplace=True)
     points = {}
     i = 0
     num_points = 0
@@ -108,6 +135,13 @@ def create_points(data_base: pd.DataFrame, num_of_points=10) -> dict:
             break
         if len(data_base['films'][i]) == 1:
             coord = tuple(map(float, data_base['coordinates'][i]))
+            try:
+                _ = points[coord]
+                coord1 = uniform(coord[0] - 0.025, coord[0] + 0.025)
+                coord2 = uniform(coord[1] - 0.025, coord[1] + 0.025)
+                coord = (coord1, coord2)
+            except KeyError:
+                pass
             points[coord], *_ = data_base['films'][i]
             num_points += 1
         else:
@@ -144,7 +178,6 @@ def create_map(coordinates: tuple, year: int):
     #                  zoom_start=17)
 
     points = create_points(read_info(coordinates, year))
-    print(points)
 
     map = folium.Map(location=coordinates,
                      # tiles='Hype Map',
@@ -163,29 +196,26 @@ def create_map(coordinates: tuple, year: int):
                                             popup=points[pos],
                                             icon=folium.Icon(icon='cloud'),
                                             tooltip=tooltip))
-        # point_layer.add_child(
-        # folium.CircleMarker(location=pos, radius=10,
-        #                     popup=points[pos],
-        #                     # tooltip=str(nameP) + " Lat: " + str(lat) + " , Long: " + str(lng),
-        #                     fill=True,  # Set fill to True
-        #                     color='red',
-        #                     fill_opacity=1.0)).add_to(map)
-        # map.add_child(folium.Marker(location=pos,
-        #                             popup=points[pos],
-        #                             icon=folium.Icon()))
 
     map.add_child(point_layer)
     map.save('map.html')
 
 
-if __name__ == '__main__':
-    year = 2018
-    position = '49.842957, 24.031111'  # Lviv
-    # position = '47.751076, -120.740135'
-    # year = input(' Please enter a year you would like to have a map for: ')
-    # position = input('Please enter your location (format: lat, long): ')
-    position = tuple(position.strip().split(', '))
+def main():
+    """
+    main function of crating map
+    """
+    # year = '2020'
+    # position = '49.842957, 24.031111'  # Lviv
+    year = input(' Please enter a year you would like to have a map for: ')
+    position = input('Please enter your location (format: lat, long): ')
+    year = int(year)
+    position = list(map(float, position.strip().split(', ')))
     print('Map is generating...\nPlease wait...')
     create_map(position, year)
     print('Finished. Please have look at the map. For do that open file '
           'map.html')
+
+
+if __name__ == '__main__':
+    main()
